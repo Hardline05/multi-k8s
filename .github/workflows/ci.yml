@@ -43,7 +43,7 @@ jobs:
       - name: Prepare EB source bundle
         run: |
           test -f docker-compose.yml
-          zip -r deploy.zip .docker-compose.yml    
+          zip -r deploy.zip docker-compose.yml    
       
       - name: Deploy to EB
         uses: einaregilsson/beanstalk-deploy@v18
