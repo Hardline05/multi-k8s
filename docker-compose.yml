@@ -3,10 +3,9 @@ services:
     image: "haedline05/multi-client"
     mem_limit: 128m
     hostname: client
-  server:
+  api:
     image: "haedline05/multi-server"
     mem_limit: 128m
-    hostname: api
     environment:
       - REDIS_HOST=$REDIS_HOST
       - REDIS_PORT=$REDIS_PORT
