@@ -2,14 +2,14 @@ name: Deploy multi-k8s
 
 on:
   push:
-    branhes:
+    branches:
       - main
 
 env:
   SHA: ${{ github.sha }}
 
 jobs:
-  depoly:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,15 +19,12 @@ jobs:
       - name: Docker login (Docker Hub)
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Test (client)(client)
+      - name: Test (client)
         run: |
           docker build -t react-test -f ./client/Dockerfile.dev ./client
           docker run --rm -e CI=true react-test npm test
 
-          docker build -t react-test -f ./client/Dockerfile.dev ./client
-          docker run --rm -e CI=true react-test npm test
-
-      # Установим gcloud и авторизуемся ключом сервис-аккаунта
+      # Авторизация в GCP по JSON ключу и экспорт ADC
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
@@ -35,22 +32,20 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
 
-      # Подтянуть kube-credentials для GKE
+      # kubeconfig для GKE (Autopilot: указывать регион)
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: ${{ secrets.GKE_CLUSTER }}     # напр. multi-k8s
-          location: ${{ secrets.GCP_REGION }}          # напр. us-central1 (регион для Autopilot)
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GCP_REGION }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      # Собираем три образа с двумя тегами: :latest и :SHA
       - name: Build images
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:${{ env.SHA }} -f ./client/Dockerfile ./client
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:${{ env.SHA }} -f ./server/Dockerfile ./server
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:${{ env.SHA }} -f ./worker/Dockerfile ./worker
 
-      # Публикуем оба тега каждого образа
       - name: Push images
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:latest
@@ -60,7 +55,6 @@ jobs:
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:${{ env.SHA }}
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:${{ env.SHA }}
 
-      # Применяем все манифесты и принудительно переключаем деплойменты на образы с тегом SHA
       - name: Apply k8s and set images
         run: |
           kubectl apply -f k8s
