@@ -1,63 +1,64 @@
-name: Deploy multi-k8s
-
-on:
-  push:
-    branches:
-      - main
-
 env:
   SHA: ${{ github.sha }}
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Docker login (Docker Hub)
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      # Аутентификация в GCP через Workload Identity Federation
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "projects/962314690377/locations/global/workloadIdentityPools/github/providers/multi-k8s"
 
-      - name: Test (client)
-        run: |
-          docker build -t react-test -f ./client/Dockerfile.dev ./client
-          docker run --rm -e CI=true react-test npm test
-
-      # Авторизация в GCP по JSON ключу и экспорт ADC
-      - name: Setup gcloud
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
+          project_id: local-grove-475801-b3
 
-      # kubeconfig для GKE (Autopilot: указывать регион)
+      # Получаем kubeconfig для GKE
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: ${{ secrets.GKE_CLUSTER }}
-          location: ${{ secrets.GCP_REGION }}
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          cluster_name: multi-k8s
+          location: us-central1
+          project_id: local-grove-475801-b3
+
+      # Логинимся в Docker Hub (секреты у тебя называются так)
+      - name: Docker Hub login
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      # (Опционально) быстрые тесты клиента, если нужно
+      # - name: Test (client)
+      #   run: |
+      #     docker build -t react-test -f ./client/Dockerfile.dev ./client
+      #     docker run --rm -e CI=true react-test npm test
 
       - name: Build images
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:${{ env.SHA }} -f ./client/Dockerfile ./client
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:${{ env.SHA }} -f ./server/Dockerfile ./server
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:latest -t ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:${{ env.SHA }} -f ./worker/Dockerfile ./worker
+          docker build -t haedline05/multi-client:latest -t haedline05/multi-client:${{ env.SHA }} -f ./client/Dockerfile ./client
+          docker build -t haedline05/multi-server:latest -t haedline05/multi-server:${{ env.SHA }} -f ./server/Dockerfile ./server
+          docker build -t haedline05/multi-worker:latest -t haedline05/multi-worker:${{ env.SHA }} -f ./worker/Dockerfile ./worker
 
       - name: Push images
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-client:${{ env.SHA }}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-server:${{ env.SHA }}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:${{ env.SHA }}
+          docker push haedline05/multi-client:latest
+          docker push haedline05/multi-server:latest
+          docker push haedline05/multi-worker:latest
+          docker push haedline05/multi-client:${{ env.SHA }}
+          docker push haedline05/multi-server:${{ env.SHA }}
+          docker push haedline05/multi-worker:${{ env.SHA }}
 
-      - name: Apply k8s and set images
+      - name: Apply manifests and set images
         run: |
           kubectl apply -f k8s
-          kubectl set image deployment/server-deployment  server=${{ secrets.DOCKERHUB_USERNAME }}/multi-server:${{ env.SHA }}
-          kubectl set image deployment/client-deployment  client=${{ secrets.DOCKERHUB_USERNAME }}/multi-client:${{ env.SHA }}
-          kubectl set image deployment/worker-deployment  worker=${{ secrets.DOCKERHUB_USERNAME }}/multi-worker:${{ env.SHA }}
+          kubectl set image deployment/server-deployment server=haedline05/multi-server:${{ env.SHA }}
+          kubectl set image deployment/client-deployment client=haedline05/multi-client:${{ env.SHA }}
+          kubectl set image deployment/worker-deployment worker=haedline05/multi-worker:${{ env.SHA }}
