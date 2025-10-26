@@ -1,3 +1,10 @@
+name: Deploy multi-k8s
+
+on:
+  push:
+    branches:
+      - main
+
 env:
   SHA: ${{ github.sha }}
 
@@ -35,11 +42,11 @@ jobs:
       - name: Docker Hub login
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      # (Опционально) быстрые тесты клиента, если нужно
-      # - name: Test (client)
-      #   run: |
-      #     docker build -t react-test -f ./client/Dockerfile.dev ./client
-      #     docker run --rm -e CI=true react-test npm test
+      # (Опционально) быстрые тесты клиента, если нужно       
+      - name: Test (client)
+        run: |
+          docker build -t react-test -f ./client/Dockerfile.dev ./client
+          docker run --rm -e CI=true react-test npm test
 
       - name: Build images
         run: |
