@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: forpractice-tls
+  namespace: default
+spec:
+  secretName: forpractice-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: forpractice.publicvm.com
+  dnsNames:
+    - forpractice.publicvm.com
+    - www.forpractice.publicvm.com
