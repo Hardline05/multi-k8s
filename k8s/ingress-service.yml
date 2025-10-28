@@ -13,7 +13,7 @@ spec:
     - hosts:
       - forpractice.publicvm.com
       - www.forpractice.publicvm.com
-      secretName: for-practice-tls-secret
+      secretName: forpractice-tls-secret
   rules:
     - host: forpractice.publicvm.com
       http:
